@@ -7,4 +7,4 @@ Data Preprocessing: Preprocess the images by resizing them to a fixed size and n
 
 Model Selection: Choose a deep neural network model architecture that is suitable for the classification task, such as a Convolutional Neural Network (CNN).
 
-Model Training: Use OneDNN to train the model on the preprocessed dataset. Using Python and TensorFlow.
+Model Training: Use OneDNN to train the model on the preprocessed dataset. Using Python and the Intel® oneAPI AI Analytics Toolkit to train a machine learning model on a preprocessed dataset using the oneDNN library.
