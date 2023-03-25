@@ -1,36 +1,53 @@
-import tensorflow as tf
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.optimizers import SGD
-from tensorflow.keras.datasets import cifar10
-import os
+import numpy as np
+import onednn as dnnl
 
-# Load the CIFAR-10 dataset
-(x_train, y_train), (x_test, y_test) = cifar10.load_data()
+# Load preprocessed data
+X_train = np.load('X_train.npy')
+y_train = np.load('y_train.npy')
+X_val = np.load('X_val.npy')
+y_val = np.load('y_val.npy')
 
-# Normalize pixel values to [0,1]
-x_train = x_train / 255.0
-x_test = x_test / 255.0
+# Define network architecture
+input_shape = X_train.shape[1:]
+num_classes = len(np.unique(y_train))
+hidden_size = 256
+net = dnnl.Sequential()
+net.add(dnnl.Input(input_shape))
+net.add(dnnl.Dense(hidden_size, activation='relu'))
+net.add(dnnl.Dense(num_classes, activation='softmax'))
 
-# Define the CNN model architecture
-model = Sequential()
-model.add(Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same', input_shape=(32, 32, 3)))
-model.add(Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same'))
-model.add(MaxPooling2D((2, 2)))
-model.add(Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same'))
-model.add(Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same'))
-model.add(MaxPooling2D((2, 2)))
-model.add(Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same'))
-model.add(Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same'))
-model.add(MaxPooling2D((2, 2)))
-model.add(Flatten())
-model.add(Dense(128, activation='relu', kernel_initializer='he_uniform'))
-model.add(Dense(10, activation='softmax'))
-
-# Compile the model with OneDNN acceleration
-opt = SGD(learning_rate=0.001, momentum=0.9)
-model.compile(optimizer=opt, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-model.summary()
+# Define optimization settings
+batch_size = 32
+num_epochs = 10
+learning_rate = 0.001
+optimizer = dnnl.Adam(learning_rate)
 
 # Train the model
-history = model.fit(x_train, y_train, epochs=50, batch_size=64, validation_data=(x_test, y_test), verbose=1)
+for epoch in range(num_epochs):
+    # Shuffle training data
+    indices = np.random.permutation(len(X_train))
+    X_train = X_train[indices]
+    y_train = y_train[indices]
+
+    # Train on batches
+    for i in range(0, len(X_train), batch_size):
+        X_batch = X_train[i:i+batch_size]
+        y_batch = y_train[i:i+batch_size]
+
+        # Forward pass
+        y_pred = net(X_batch)
+
+        # Compute loss
+        loss = dnnl.losses.cross_entropy(y_pred, y_batch)
+
+        # Backward pass
+        grad = loss.grad()
+        net.backward(grad)
+
+        # Update parameters
+        optimizer.update(net)
+
+    # Evaluate on validation set
+    y_pred_val = net(X_val)
+    acc_val = dnnl.metrics.accuracy(y_pred_val, y_val)
+    print(f'Epoch {epoch+1}/{num_epochs}, Val Acc: {acc_val:.4f}')
